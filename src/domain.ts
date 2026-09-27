@@ -2,6 +2,36 @@ import type { EnergyDevice, EnergyEstimate, EnergyScenario, ScenarioSummary } fr
 
 export const MAX_DAILY_HOURS = 24;
 
+export const DEFAULT_DEVICE_NAME = '新设备';
+export const UNNAMED_DEVICE_NAME = '未命名设备';
+
+export function nextDeviceName(existing: Array<Pick<EnergyDevice, 'name'>>, base: string = DEFAULT_DEVICE_NAME): string {
+  const taken = new Set(existing.map((device) => device.name.trim()));
+  if (!taken.has(base)) return base;
+  let suffix = 2;
+  while (taken.has(`${base} ${suffix}`)) suffix += 1;
+  return `${base} ${suffix}`;
+}
+
+export function resolveDeviceDisplayNames(devices: Array<Pick<EnergyDevice, 'id' | 'name'>>): Map<string, string> {
+  const taken = new Set<string>();
+  const occurrences = new Map<string, number>();
+  const resolved = new Map<string, string>();
+  for (const device of devices) {
+    const base = device.name.trim() || UNNAMED_DEVICE_NAME;
+    let suffix = (occurrences.get(base) ?? 0) + 1;
+    let candidate = suffix === 1 ? base : `${base} ${suffix}`;
+    while (taken.has(candidate)) {
+      suffix += 1;
+      candidate = `${base} ${suffix}`;
+    }
+    occurrences.set(base, suffix);
+    taken.add(candidate);
+    resolved.set(device.id, candidate);
+  }
+  return resolved;
+}
+
 export const exampleScenario: EnergyScenario = {
   id: 'scenario-home',
   name: '夏日居家方案',

@@ -43,4 +43,34 @@ describe('EnergyLensViewModel', () => {
     expect(vm.getState().status).toBe('error');
     expect(vm.getState().notice?.text).toContain('保存失败');
   });
+
+  it('gives each new device a distinct default name and id', () => {
+    vm.addDevice();
+    vm.addDevice();
+    const devices = vm.activeScenario?.devices ?? [];
+    const names = devices.map((device) => device.name);
+    const ids = devices.map((device) => device.id);
+    expect(new Set(names).size).toBe(names.length);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(names).toContain('新设备');
+    expect(names).toContain('新设备 2');
+  });
+
+  it('replaces a manually cleared device name with an identifiable fallback', () => {
+    vm.updateDevice('device-aircon', { name: '   ' });
+    const device = vm.activeScenario?.devices.find((item) => item.id === 'device-aircon');
+    expect(device?.name).toBe('未命名设备');
+    expect(vm.getState().status).toBe('editing');
+    expect(vm.getState().notice?.kind).toBe('success');
+    expect(repository.save).toHaveBeenCalled();
+  });
+
+  it('heals a legacy empty-name device on first edit instead of blocking it', () => {
+    repository.data.scenarios[0].devices[0].name = '';
+    vm.initialize();
+    vm.updateDevice('device-aircon', { watts: 900 });
+    const device = vm.activeScenario?.devices.find((item) => item.id === 'device-aircon');
+    expect(device?.watts).toBe(900);
+    expect(device?.name).toBe('未命名设备');
+  });
 });

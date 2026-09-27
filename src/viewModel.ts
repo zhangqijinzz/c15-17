@@ -1,4 +1,4 @@
-import { cloneScenario, summarizeScenario, validateDevice, validateScenarioSettings } from './domain';
+import { nextDeviceName, cloneScenario, summarizeScenario, UNNAMED_DEVICE_NAME, validateDevice, validateScenarioSettings } from './domain';
 import { findScenario, type EnergyRepository } from './repository';
 import type { EnergyDevice, EnergyDocument, EnergyScenario, Notice, ViewStatus } from './types';
 
@@ -47,6 +47,9 @@ export class EnergyLensViewModel {
     const device = scenario.devices.find((item) => item.id === deviceId);
     if (!device) return;
     const next = { ...device, ...patch };
+    if (!next.name.trim()) {
+      next.name = nextDeviceName(scenario.devices.filter((item) => item.id !== deviceId), UNNAMED_DEVICE_NAME);
+    }
     const error = validateDevice(next);
     if (error) {
       this.setNotice({ kind: 'error', text: error });
@@ -58,8 +61,20 @@ export class EnergyLensViewModel {
   addDevice(): void {
     const scenario = this.activeScenario;
     if (!scenario) return;
-    const device: EnergyDevice = { id: `device-${Date.now()}`, name: '新设备', watts: 100, dailyHours: 1 };
+    const device: EnergyDevice = { id: this.nextDeviceId(scenario), name: nextDeviceName(scenario.devices), watts: 100, dailyHours: 1 };
     this.commit((current) => ({ ...current, devices: [...current.devices, device] }), '已添加设备，可继续修改参数');
+  }
+
+  private nextDeviceId(scenario: EnergyScenario): string {
+    const ids = new Set(scenario.devices.map((device) => device.id));
+    const stamp = Date.now();
+    let candidate = `device-${stamp}`;
+    let suffix = 2;
+    while (ids.has(candidate)) {
+      candidate = `device-${stamp}-${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
   }
 
   removeDevice(deviceId: string): void {

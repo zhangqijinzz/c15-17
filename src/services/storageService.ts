@@ -1,4 +1,4 @@
-import type { EnergyDocument } from '../types';
+import type { EnergyDevice, EnergyDocument, EnergyScenario } from '../types';
 
 const STORAGE_KEY = 'energy-lens.document.v1';
 
@@ -6,9 +6,7 @@ export function readDocument(): EnergyDocument | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!isDocument(parsed)) return null;
-    return parsed;
+    return normalizeDocument(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -18,41 +16,52 @@ export function writeDocument(document: EnergyDocument): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(document));
 }
 
-function isDocument(value: unknown): value is EnergyDocument {
-  if (!value || typeof value !== 'object') return false;
+function normalizeDocument(value: unknown): EnergyDocument | null {
+  if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<EnergyDocument>;
-  return candidate.version === 1
-    && typeof candidate.activeScenarioId === 'string'
-    && Array.isArray(candidate.scenarios)
-    && candidate.scenarios.length > 0
-    && candidate.scenarios.every(isScenario)
-    && candidate.scenarios.some((scenario) => scenario.id === candidate.activeScenarioId);
+  if (candidate.version !== 1 || typeof candidate.activeScenarioId !== 'string' || !Array.isArray(candidate.scenarios)) return null;
+  const scenarios = candidate.scenarios.map(normalizeScenario);
+  if (scenarios.length === 0 || scenarios.some((scenario) => scenario === null)) return null;
+  const valid = scenarios as EnergyScenario[];
+  if (!valid.some((scenario) => scenario.id === candidate.activeScenarioId)) return null;
+  return { version: 1, scenarios: valid, activeScenarioId: candidate.activeScenarioId };
 }
 
-function isScenario(value: unknown): value is EnergyDocument['scenarios'][number] {
-  if (!value || typeof value !== 'object') return false;
-  const scenario = value as Partial<EnergyDocument['scenarios'][number]>;
-  return typeof scenario.id === 'string'
-    && typeof scenario.name === 'string'
-    && typeof scenario.createdAt === 'string'
-    && typeof scenario.pricePerKwh === 'number'
-    && scenario.pricePerKwh >= 0
-    && typeof scenario.daysPerMonth === 'number'
-    && scenario.daysPerMonth >= 1
-    && scenario.daysPerMonth <= 31
-    && Array.isArray(scenario.devices)
-    && scenario.devices.length > 0
-    && scenario.devices.every(isDevice);
+function normalizeScenario(value: unknown): EnergyScenario | null {
+  if (!value || typeof value !== 'object') return null;
+  const scenario = value as Partial<EnergyScenario>;
+  if (typeof scenario.id !== 'string'
+    || typeof scenario.name !== 'string'
+    || typeof scenario.createdAt !== 'string'
+    || typeof scenario.pricePerKwh !== 'number'
+    || scenario.pricePerKwh < 0
+    || typeof scenario.daysPerMonth !== 'number'
+    || scenario.daysPerMonth < 1
+    || scenario.daysPerMonth > 31
+    || !Array.isArray(scenario.devices)
+    || scenario.devices.length === 0) return null;
+  const devices = scenario.devices.map(normalizeDevice);
+  if (devices.some((device) => device === null)) return null;
+  return {
+    id: scenario.id,
+    name: scenario.name,
+    createdAt: scenario.createdAt,
+    pricePerKwh: scenario.pricePerKwh,
+    daysPerMonth: scenario.daysPerMonth,
+    devices: devices as EnergyDevice[],
+  };
 }
 
-function isDevice(value: unknown): value is EnergyDocument['scenarios'][number]['devices'][number] {
-  if (!value || typeof value !== 'object') return false;
-  const device = value as Partial<EnergyDocument['scenarios'][number]['devices'][number]>;
-  return typeof device.id === 'string'
-    && typeof device.name === 'string'
-    && typeof device.watts === 'number'
-    && device.watts >= 0
-    && typeof device.dailyHours === 'number'
-    && device.dailyHours >= 0
-    && device.dailyHours <= 24;
+function normalizeDevice(value: unknown): EnergyDevice | null {
+  if (!value || typeof value !== 'object') return null;
+  const device = value as Partial<EnergyDevice>;
+  if (typeof device.id !== 'string'
+    || typeof device.watts !== 'number'
+    || device.watts < 0
+    || typeof device.dailyHours !== 'number'
+    || device.dailyHours < 0
+    || device.dailyHours > 24) return null;
+  // 历史数据里可能缺失名称或名称不是字符串，修复为空串，由展示层兜底成可识别的名字
+  const name = typeof device.name === 'string' ? device.name : '';
+  return { id: device.id, name, watts: device.watts, dailyHours: device.dailyHours };
 }
