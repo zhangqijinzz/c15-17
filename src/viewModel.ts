@@ -1,4 +1,4 @@
-import { cloneScenario, summarizeScenario, validateDevice, validateScenarioSettings } from './domain';
+import { cloneScenario, nextDeviceName, summarizeScenario, validateDevice, validateScenarioSettings } from './domain';
 import { findScenario, type EnergyRepository } from './repository';
 import type { EnergyDevice, EnergyDocument, EnergyScenario, Notice, ViewStatus } from './types';
 
@@ -13,6 +13,7 @@ type Listener = (state: EnergyLensState) => void;
 export class EnergyLensViewModel {
   private state: EnergyLensState = { document: null, status: 'loading', notice: null };
   private readonly listeners = new Set<Listener>();
+  private deviceSequence = 0;
 
   constructor(private readonly repository: EnergyRepository) {}
 
@@ -58,7 +59,9 @@ export class EnergyLensViewModel {
   addDevice(): void {
     const scenario = this.activeScenario;
     if (!scenario) return;
-    const device: EnergyDevice = { id: `device-${Date.now()}`, name: '新设备', watts: 100, dailyHours: 1 };
+    // 默认名避开已有名称，id 带自增序号，同一毫秒内连续添加也不会撞名或撞 id
+    this.deviceSequence += 1;
+    const device: EnergyDevice = { id: `device-${Date.now()}-${this.deviceSequence}`, name: nextDeviceName(scenario.devices), watts: 100, dailyHours: 1 };
     this.commit((current) => ({ ...current, devices: [...current.devices, device] }), '已添加设备，可继续修改参数');
   }
 

@@ -8,10 +8,27 @@ export function readDocument(): EnergyDocument | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!isDocument(parsed)) return null;
-    return parsed;
+    return normalizeDocument(parsed);
   } catch {
     return null;
   }
+}
+
+/**
+ * 旧数据里可能存在缺失或非字符串的设备名，统一归一化为空字符串，
+ * 由展示层回退为“未命名设备 N”，避免整份方案因名称问题被判无效。
+ */
+function normalizeDocument(document: EnergyDocument): EnergyDocument {
+  return {
+    ...document,
+    scenarios: document.scenarios.map((scenario) => ({
+      ...scenario,
+      devices: scenario.devices.map((device) => ({
+        ...device,
+        name: typeof device.name === 'string' ? device.name : '',
+      })),
+    })),
+  };
 }
 
 export function writeDocument(document: EnergyDocument): void {
@@ -48,8 +65,9 @@ function isScenario(value: unknown): value is EnergyDocument['scenarios'][number
 function isDevice(value: unknown): value is EnergyDocument['scenarios'][number]['devices'][number] {
   if (!value || typeof value !== 'object') return false;
   const device = value as Partial<EnergyDocument['scenarios'][number]['devices'][number]>;
+  // 名称缺失（undefined/null）的旧数据也视为合法，读取时由 normalizeDocument 补为空字符串
   return typeof device.id === 'string'
-    && typeof device.name === 'string'
+    && (device.name === undefined || device.name === null || typeof device.name === 'string')
     && typeof device.watts === 'number'
     && device.watts >= 0
     && typeof device.dailyHours === 'number'
